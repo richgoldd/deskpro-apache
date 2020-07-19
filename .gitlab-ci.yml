@@ -1,0 +1,45 @@
+### DO NOT MODIFY FROM HERE TO
+# https://gitlab.com/gitlab-org/gitlab-runner/-/blob/master/docs/executors/kubernetes.md#using-dockerdind
+image: docker:19.03.1
+services:
+  - docker:19.03.1-dind
+  
+variables:
+  DOCKER_DRIVER: overlay2
+  # Use TLS https://docs.gitlab.com/ee/ci/docker/using_docker_build.html#tls-enabled
+  DOCKER_HOST: tcp://localhost:2375
+  #DOCKER_TLS_CERTDIR: "/certs"
+  # This will instruct Docker not to start over TLS.
+  DOCKER_TLS_CERTDIR: ""
+### HERE... I spent hours on getting stupid Docker-in-Docker to work on a shared runner hosted in GKE
+
+before_script: 
+  - docker info
+  - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  - docker pull $CI_REGISTRY_IMAGE:latest || true
+  
+docker-build-master:
+  tags:
+    - ableto-apps-dev-gke-apps1
+  stage: build
+  services:
+    - docker:dind
+  script:
+    - docker build --cache-from $CI_REGISTRY_IMAGE:latest -t "$CI_REGISTRY_IMAGE" -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" .
+    #- docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" .
+    - docker push "$CI_REGISTRY_IMAGE"
+  only:
+    - master
+
+docker-build:
+  tags:
+    - ableto-apps-dev-gke-apps1
+  stage: build
+  services:
+    - docker:dind
+  script:
+    - docker build --cache-from $CI_REGISTRY_IMAGE:latest -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" .
+    #- docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG" .
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+  except:
+    - master
